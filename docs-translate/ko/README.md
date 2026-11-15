@@ -142,7 +142,7 @@ Linux 또는 WSL에서 [tools/build.sh](../../tools/build.sh)를 실행하면 Go
 
 ## 라이선스
 
-Dplus는 MIT License를 따른다. [LICENSE](../../LICENSE)를 참조한다.
+Dplus는 MIT License를 따른다. [LICENSE](../../LICENSE)를 참조한다. [internal/worker/dry_penalty.py](../../internal/worker/dry_penalty.py)는 vLLM의 DRY 반복 penalty를 바탕으로 작성했으며 Apache License 2.0을 따른다. [NOTICE](../../NOTICE)를 참조한다.
 
 ## 모델 라이선스
 

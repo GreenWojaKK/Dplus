@@ -1,0 +1,11 @@
+Dplus
+Copyright 2026 GreenWojaKK
+
+Dplus is licensed under the MIT License (LICENSE), except internal/worker/dry_penalty.py.
+
+internal/worker/dry_penalty.py adapts the DRY repetition penalty of vLLM's DRY example and is licensed under the
+Apache License 2.0 (LICENSES/Apache-2.0.txt):
+vLLM
+Copyright contributors to the vLLM project
+
+Changes are described at the top of internal/worker/dry_penalty.py.

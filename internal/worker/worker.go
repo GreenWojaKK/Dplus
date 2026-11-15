@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +21,14 @@ import (
 
 //go:embed backbone.py
 var source string
+
+// modules are the Python modules the worker imports, by file name. They are kept in files of their own for their
+// licenses, and written into a folder on the worker's PYTHONPATH while it runs.
+//
+//go:embed dry_penalty.py
+var dryPenalty string
+
+var modules = map[string]*string{"dry_penalty.py": &dryPenalty}
 
 const (
 	maxReply  = 64 << 20
@@ -106,12 +116,13 @@ type Client struct {
 	Record string
 	Every  int
 
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout *bufio.Scanner
-	logs   *tail
-	next   int
-	Info   Ready
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	stdout  *bufio.Scanner
+	logs    *tail
+	next    int
+	Info    Ready
+	modules string // The folder the worker's modules are written into while it runs.
 }
 
 type tail struct {
@@ -138,23 +149,36 @@ func (c *Client) start() error {
 	if c.cmd != nil {
 		return nil
 	}
+	folder, err := writeModules()
+	if err != nil {
+		return fmt.Errorf("writing the model worker's modules: %w", err)
+	}
 	cmd := exec.Command(c.Python, "-c", source, c.Model, c.Head, c.Device, c.Kernels, c.Record, strconv.Itoa(c.Every))
+	path := folder
+	if inherited := os.Getenv("PYTHONPATH"); inherited != "" {
+		path += string(os.PathListSeparator) + inherited
+	}
+	cmd.Env = append(os.Environ(), "PYTHONPATH="+path)
+	fail := func(err error) error {
+		os.RemoveAll(folder)
+		return err
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return err
+		return fail(err)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return err
+		return fail(err)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return err
+		return fail(err)
 	}
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("starting the model worker: %w", err)
+		return fail(fmt.Errorf("starting the model worker: %w", err))
 	}
-	c.cmd, c.stdin = cmd, stdin
+	c.cmd, c.stdin, c.modules = cmd, stdin, folder
 	c.logs = &tail{}
 	go func() {
 		lines := bufio.NewScanner(stderr)
@@ -174,6 +198,21 @@ func (c *Client) start() error {
 	}
 	c.Info = ready.Ready
 	return nil
+}
+
+// writeModules writes the worker's modules into a new folder and returns it.
+func writeModules() (string, error) {
+	folder, err := os.MkdirTemp("", "dplus-worker-")
+	if err != nil {
+		return "", err
+	}
+	for name, text := range modules {
+		if err := os.WriteFile(filepath.Join(folder, name), []byte(*text), 0o644); err != nil {
+			os.RemoveAll(folder)
+			return "", err
+		}
+	}
+	return folder, nil
 }
 
 // Start loads the model now instead of at the first request.
@@ -256,6 +295,8 @@ func (c *Client) Close() {
 		<-done
 	}
 	c.cmd = nil
+	os.RemoveAll(c.modules)
+	c.modules = ""
 }
 
 type answer struct {

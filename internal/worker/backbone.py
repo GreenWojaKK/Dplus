@@ -37,6 +37,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:False"
 
 import numpy  # noqa: E402
 import torch  # noqa: E402
+from dry_penalty import dry_penalties, max_exponent  # noqa: E402  The Go client writes it beside the worker.
 from safetensors import safe_open  # noqa: E402
 
 # The DRY repetition penalty: a token that would extend a repeat of at least DRY_ALLOWED tokens of the output loses
@@ -48,8 +49,7 @@ DRY_MULTIPLIER = 0.8
 DRY_BASE = 1.75
 DRY_ALLOWED = 32
 DRY_BREAKERS = ("\n", ":", '"', "*")
-# The exponent's bound, as in llama.cpp: the largest whose power a float32 holds.
-DRY_MAX_EXPONENT = int(numpy.float32(88.7228391) / numpy.log(numpy.float32(DRY_BASE)))
+DRY_MAX_EXPONENT = max_exponent(DRY_BASE)
 
 # Device memory one pass of a decision's questions may take to copy the shared state's keys and values into its rows.
 QUESTION_PASS_BYTES = 1 << 30
@@ -73,60 +73,6 @@ def memory(device):
     return {
         "allocated_mib": round(torch.cuda.memory_allocated(device) / 2**20),
         "peak_mib": round(torch.cuda.max_memory_allocated(device) / 2**20),
-    }
-
-
-def dry_penalties(window, breakers):
-    """The DRY penalty of each token that would extend a repeat within the window, by token.
-
-    Adapted from `_dry_penalties` of vLLM's DRY example (examples/features/logits_processor/dry.py, Apache-2.0), a
-    port of the scan in llama.cpp's `llama_sampler_dry_apply`: a Z-algorithm run from the end finds, for each
-    position, how long the tokens ending there match the end of the window; the token after such a match is charged
-    for the longest repeat it would extend.
-    """
-    size = len(window)
-    if size <= DRY_ALLOWED:
-        return {}
-
-    def back(i):  # back(0) is the last token
-        return window[size - 1 - i]
-
-    # The nearest breaker from the end bounds the repeat.
-    limit = size
-    for i in range(size):
-        if back(i) in breakers:
-            limit = i
-            break
-    if limit < DRY_ALLOWED:
-        return {}
-    matched = [0] * size
-    last = size - 1
-    left = right = 0
-    for k in range(1, size):
-        if k > right:
-            z = 0
-            while z + k < size and back(z) == back(z + k):
-                z += 1
-            matched[last - k] = min(z, limit)
-            if z > 0:
-                left, right = k, k + z - 1
-        else:
-            inside = right - k + 1
-            if matched[last - (k - left)] < inside:
-                matched[last - k] = min(matched[last - (k - left)], limit)
-            else:
-                j = right + 1
-                while j < size and back(j) == back(j - k):
-                    j += 1
-                matched[last - k] = min(j - k, limit)
-                left, right = k, j - 1
-    longest = {}
-    for i in range(size - 1):
-        if matched[i] >= DRY_ALLOWED and longest.get(window[i + 1], -1) < matched[i]:
-            longest[window[i + 1]] = matched[i]
-    return {
-        token: DRY_MULTIPLIER * DRY_BASE ** min(length - DRY_ALLOWED, DRY_MAX_EXPONENT)
-        for token, length in longest.items() if token not in breakers
     }
 
 
@@ -358,7 +304,8 @@ class Pool:
         logits = logits.float()
         at, tokens, penalties = [], [], []
         for index, row in enumerate(rows):
-            for token, penalty in dry_penalties(row.tokens, backbone.breakers).items():
+            charged = dry_penalties(row.tokens, backbone.breakers, DRY_MULTIPLIER, DRY_BASE, DRY_ALLOWED, DRY_MAX_EXPONENT)
+            for token, penalty in charged.items():
                 at.append(index)
                 tokens.append(token)
                 penalties.append(min(penalty, 3.0e38))

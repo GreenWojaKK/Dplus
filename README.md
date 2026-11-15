@@ -140,7 +140,7 @@ Run [tools/build.sh](tools/build.sh) under Linux or WSL to check Go formatting, 
 
 ## License
 
-Dplus is licensed under the MIT License; see [LICENSE](LICENSE).
+Dplus is licensed under the MIT License; see [LICENSE](LICENSE). [internal/worker/dry_penalty.py](internal/worker/dry_penalty.py) adapts the DRY repetition penalty of vLLM and is licensed under the Apache License 2.0; see [NOTICE](NOTICE).
 
 ## Model licenses
 

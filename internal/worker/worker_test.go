@@ -1,7 +1,9 @@
 package worker
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -68,6 +70,31 @@ func startFake(t *testing.T) *Client {
 	client := &Client{Python: python, Model: "unused", Device: "cpu"}
 	t.Cleanup(client.Close)
 	return client
+}
+
+func TestTheWorkerImportsItsModulesAndTheirFolderGoesWithIt(t *testing.T) {
+	client := startFake(t)
+	source = `
+import json, sys
+import dry_penalty
+penalties = dry_penalty.dry_penalties([1, 2, 3] * 4, frozenset(), 0.8, 1.75, 2, dry_penalty.max_exponent(1.75))
+print(json.dumps({"ready": True, "device": "fake", "parameters": len(penalties), "head_parameters": 0, "allocated_mib": 0}), flush=True)
+sys.stdin.read()
+`
+	if err := client.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if client.Info.Parameters != 1 {
+		t.Fatalf("the module charged %d tokens", client.Info.Parameters)
+	}
+	folder := client.modules
+	if _, err := os.Stat(filepath.Join(folder, "dry_penalty.py")); err != nil {
+		t.Fatal(err)
+	}
+	client.Close()
+	if _, err := os.Stat(folder); !os.IsNotExist(err) {
+		t.Fatalf("the modules' folder stays after the worker ends: %v", err)
+	}
 }
 
 func TestAChoiceIsAnswered(t *testing.T) {

@@ -165,7 +165,7 @@ Decoding selects the token with the highest logit after two adjustments:
 
 | Adjustment | Rule |
 |---|---|
-| DRY repetition penalty | A token that would extend a repeat of at least 32 tokens of the row's output loses `0.8 × 1.75^(repeat length − 32)` from its logit. A repeat does not extend across a token containing a line break, `:`, `"` or `*`. Repeats of phrases shorter than the allowed length are not penalized |
+| DRY repetition penalty | A token that would extend a repeat of at least 32 tokens of the row's output loses `0.8 × 1.75^(repeat length − 32)` from its logit. A repeat does not extend across a token containing a line break, `:`, `"` or `*`. Repeats of phrases shorter than the allowed length are not penalized. [internal/worker/dry_penalty.py](internal/worker/dry_penalty.py) computes the penalty; the Go client writes it into a temporary folder on the worker's `PYTHONPATH` |
 | Pattern | For a request with a pattern, llguidance computes the tokens that keep the output within the regular expression, and all other tokens are excluded |
 
 Requests share decode steps through continuous batching. Each active row represents one generation request and maintains its token sequence, positions, attention mask, KV cache, recurrent state and convolution state. The maximum row count is the configured batch size, which defaults to 16.

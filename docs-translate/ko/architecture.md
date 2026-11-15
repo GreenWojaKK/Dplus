@@ -167,7 +167,7 @@ Decoding은 다음 두 가지를 적용한 뒤 logit이 가장 높은 token을 �
 
 | 적용 항목 | 규칙 |
 |---|---|
-| DRY 반복 penalty | 행의 출력에서 32 token 이상 이어진 반복을 한 번 더 잇는 token은 logit에서 `0.8 × 1.75^(반복 길이 − 32)`만큼 깎인다. 줄바꿈, `:`, `"`, `*`를 포함한 token을 넘어서는 반복은 이어진 것으로 세지 않는다. 허용 길이보다 짧은 구절의 반복에는 penalty가 없다 |
+| DRY 반복 penalty | 행의 출력에서 32 token 이상 이어진 반복을 한 번 더 잇는 token은 logit에서 `0.8 × 1.75^(반복 길이 − 32)`만큼 깎인다. 줄바꿈, `:`, `"`, `*`를 포함한 token을 넘어서는 반복은 이어진 것으로 세지 않는다. 허용 길이보다 짧은 구절의 반복에는 penalty가 없다. Penalty는 [internal/worker/dry_penalty.py](../../internal/worker/dry_penalty.py)가 계산하며, Go client가 이 파일을 worker의 `PYTHONPATH`에 있는 임시 폴더에 써 둔다 |
 | Pattern | Pattern이 있는 요청은 llguidance가 출력을 정규식 안에 두는 token을 계산하고, 나머지 token은 제외한다 |
 
 요청은 continuous batching으로 decode step을 공유한다. 각 활성 행은 generation 요청 하나를 나타내며, token sequence, position, attention mask, KV cache, recurrent state와 convolution state를 유지한다. 최대 행 수는 설정한 batch size이며 기본값은 16이다.

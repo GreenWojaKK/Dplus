@@ -1,0 +1,11 @@
+/dist/
+/out/
+/.claude/
+/samples/
+*.dplus.json
+*.dplus.md
+PLAN1.md
+AGENTS.md
+DEFERRED.md
+__pycache__/
+/archive/
